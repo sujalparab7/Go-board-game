@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Go AI Game</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        :root {
+            --board-size: 9;
+            --cell-size: calc(100% / var(--board-size));
+            --stone-size: calc(100% / var(--board-size));
+            --grid-size: calc(100% / (var(--board-size) - 1));
+        }
+        #board-container {
+            background-color: #d1a55d; /* Go board color */
+        }
+        .grid-line {
+            background-color: rgba(0, 0, 0, 0.3);
+        }
+        #grid-lines {
+            grid-template-columns: repeat(calc(var(--board-size) - 1), 1fr);
+            grid-template-rows: repeat(calc(var(--board-size) - 1), 1fr);
+        }
+        #board-intersections {
+            grid-template-columns: repeat(var(--board-size), 1fr);
+            grid-template-rows: repeat(var(--board-size), 1fr);
+        }
+        .intersection {
+            width: var(--cell-size);
+            height: var(--cell-size);
+        }
+        .star-point {
+            position: absolute;
+            width: 6px;
+            height: 6px;
+            background-color: rgba(0, 0, 0, 0.4);
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+        }
+        .stone {
+            width: var(--stone-size);
+            height: var(--stone-size);
+            transform: translate(-50%, -50%); /* Center stone on intersection */
+        }
+        .hover-black::after {
+            content: '';
+            position: absolute;
+            width: var(--stone-size);
+            height: var(--stone-size);
+            background-color: rgba(0, 0, 0, 0.3);
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            left: 50%;
+            top: 50%;
+        }
+        .hover-white::after {
+            content: '';
+            position: absolute;
+            width: var(--stone-size);
+            height: var(--stone-size);
+            background-color: rgba(255, 255, 255, 0.3);
+            border: 1px solid rgba(0,0,0,0.2);
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            left: 50%;
+            top: 50%;
+        }
+        
+        /* Loading Overlay */
+        .loading-overlay {
+            position: fixed;
+            inset: 0;
+            background-color: rgba(0, 0, 0, 0.6);
+            display: none; /* Hidden by default */
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+            backdrop-filter: blur(4px);
+        }
+        .loading-spinner {
+            width: 48px;
+            height: 48px;
+            border: 4px solid #fff;
+            border-bottom-color: transparent;
+            border-radius: 50%;
+            display: inline-block;
+            box-sizing: border-box;
+            animation: rotation 1s linear infinite;
+        }
+        @keyframes rotation {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="bg-gray-100 font-sans flex items-center justify-center min-h-screen">
+
+    <div class="w-full max-w-4xl mx-auto p-4">
+        <header class="text-center mb-4">
+            <h1 class="text-3xl font-bold text-gray-800">Go AI Game (9x9)</h1>
+            <p class="text-gray-600">You are Black. The AI is White.</p>
+        </header>
+
+        <div class="bg-white p-4 sm:p-6 rounded-lg shadow-lg">
+            <!-- Score / Info Panel -->
+            <div class="flex justify-between items-center mb-4 p-4 bg-gray-50 rounded-lg">
+                <div>
+                    <span class="text-lg font-semibold">Player (Black):</span>
+                    <span id="black-captures" class="text-lg">0</span> captures
+                </div>
+                <div id="game-message" class="text-center font-medium text-blue-700 h-6"></div>
+                <div>
+                    <span class="text-lg font-semibold">AI (White):</span>
+                    <span id="white-captures" class="text-lg">0</span> captures
+                </div>
+            </div>
+
+            <!-- Board -->
+            <div id="board-container" class="relative w-full aspect-square max-w-lg mx-auto bg-yellow-600 rounded shadow-inner" style="--board-size: 9;">
+                <!-- Grid Lines -->
+                <div id="grid-lines" class="absolute inset-0 grid grid-cols-8 grid-rows-8" style="padding: calc(var(--grid-size) / 2); box-sizing: border-box;">
+                    <!-- Vertical Lines -->
+                    <div class="grid-line" style="grid-column: 1 / -1; grid-row: 1; height: 1px; transform: translateY(-0.5px);"></div>
+                    <div class="grid-line" style="grid-column: 1 / -1; grid-row: 2; height: 1px; transform: translateY(-0.5px);"></div>
+                    <div class="grid-line" style="grid-column: 1 / -1; grid-row: 3; height: 1px; transform: translateY(-0.5px);"></div>
+                    <div class="grid-line" style="grid-column: 1 / -1; grid-row: 4; height: 1px; transform: translateY(-0.5px);"></div>
+                    <div class="grid-line" style="grid-column: 1 / -1; grid-row: 5; height: 1px; transform: translateY(-0.5px);"></div>
+                    <div class="grid-line" style="grid-column: 1 / -1; grid-row: 6; height: 1px; transform: translateY(-0.5px);"></div>
+                    <div class="grid-line" style="grid-column: 1 / -1; grid-row: 7; height: 1px; transform: translateY(-0.5px);"></div>
+                    <div class="grid-line" style="grid-column: 1 / -1; grid-row: 8; height: 1px; transform: translateY(-0.5px);"></div>
+                    <!-- Horizontal Lines -->
+                    <div class="grid-line" style="grid-column: 1; grid-row: 1 / -1; width: 1px; transform: translateX(-0.5px);"></div>
+                    <div class="grid-line" style="grid-column: 2; grid-row: 1 / -1; width: 1px; transform: translateX(-0.5px);"></div>
+                    <div class="grid-line" style="grid-column: 3; grid-row: 1 / -1; width: 1px; transform: translateX(-0.5px);"></div>
+                    <div class="grid-line" style="grid-column: 4; grid-row: 1 / -1; width: 1px; transform: translateX(-0.5px);"></div>
+                    <div class="grid-line" style="grid-column: 5; grid-row: 1 / -1; width: 1px; transform: translateX(-0.5px);"></div>
+                    <div class="grid-line" style="grid-column: 6; grid-row: 1 / -1; width: 1px; transform: translateX(-0.5px);"></div>
+                    <div class="grid-line" style="grid-column: 7; grid-row: 1 / -1; width: 1px; transform: translateX(-0.5px);"></div>
+                    <div class="grid-line" style="grid-column: 8; grid-row: 1 / -1; width: 1px; transform: translateX(-0.5px);"></div>
+                </div>
+                <!-- Star Points (REMOVED as requested) -->
+                <!--
+                <div id="star-points" class="absolute inset-0 pointer-events-none">
+                    <div class="star-point" style="top: 25%; left: 25%;"></div>
+                    <div class="star-point" style="top: 25%; left: 75%;"></div>
+                    <div class="star-point" style="top: 50%; left: 50%;"></div>
+                    <div class="star-point" style="top: 75%; left: 25%;"></div>
+                    <div class="star-point" style="top: 75%; left: 75%;"></div>
+                </div>
+                -->
+                <!-- Intersections (for clicks) -->
+                <div id="board-intersections" class="absolute inset-0 grid z-10">
+                    <!-- JS will populate this -->
+                </div>
+                <!-- Stones -->
+                <div id="stone-layer" class="absolute inset-0 pointer-events-none z-20">
+                    <!-- JS will populate this -->
+                </div>
+            </div>
+
+            <!-- Controls -->
+            <div class="flex justify-center gap-4 mt-6">
+                <button id="new-game-btn" class="px-6 py-2 bg-blue-600 text-white font-semibold rounded-lg shadow hover:bg-blue-700 transition-colors">New Game</button>
+                <button id="pass-btn" class="px-6 py-2 bg-gray-600 text-white font-semibold rounded-lg shadow hover:bg-gray-700 transition-colors">Pass</button>
+                <button id="score-btn" class="px-6 py-2 bg-green-600 text-white font-semibold rounded-lg shadow hover:bg-green-700 transition-colors">Get Score</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" class="loading-overlay">
+        <div class="loading-spinner"></div>
+        <p class="text-white text-lg mt-4">AI is thinking...</p>
+    </div>
+
+    <script>
+        const BOARD_SIZE = 9;
+        const EMPTY = 0;
+        const BLACK = 1;
+        const WHITE = 2;
+        const API_URL = 'http://localhost:8080';
+
+        let gameState = {};
+        let lastPlayerMoveBoardState = null; // Used for Ko rule
+
+        // DOM Elements
+        const boardIntersections = document.getElementById('board-intersections');
+        const stoneLayer = document.getElementById('stone-layer');
+        const blackCapturesEl = document.getElementById('black-captures');
+        const whiteCapturesEl = document.getElementById('white-captures');
+        const gameMessageEl = document.getElementById('game-message');
+        const loadingOverlay = document.getElementById('loading-overlay');
+        
+        const newGameButton = document.getElementById('new-game-btn');
+        const passButton = document.getElementById('pass-btn');
+        const scoreButton = document.getElementById('score-btn');
+
+        function initGame() {
+            gameState = {
+                board: Array(BOARD_SIZE * BOARD_SIZE).fill(EMPTY),
+                currentPlayer: BLACK,
+                captures: { [BLACK]: 0, [WHITE]: 0 },
+                lastBoardState: null, // This is the state for the *opponent* (AI) to check against
+                gameOver: false,
+                passCount: 0
+            };
+            lastPlayerMoveBoardState = null; // This is the state for the *player* to check against
+
+            drawBoard();
+            updateInfo();
+            hideLoading();
+            hideMessage();
+        }
+
+        function drawBoard() {
+            boardIntersections.innerHTML = '';
+            stoneLayer.innerHTML = '';
+
+            for (let r = 0; r < BOARD_SIZE; r++) {
+                for (let c = 0; c < BOARD_SIZE; c++) {
+                    const intersection = document.createElement('div');
+                    intersection.className = 'relative w-full h-full flex items-center justify-center rounded-full intersection';
+                    intersection.dataset.row = r;
+                    intersection.dataset.col = c;
+                    
+                    intersection.addEventListener('click', () => handleIntersectionClick(r, c));
+                    
+                    intersection.addEventListener('mouseenter', () => {
+                        if (gameState.board[r * BOARD_SIZE + c] === EMPTY && !gameState.gameOver && gameState.currentPlayer === BLACK) {
+                            intersection.classList.add('hover-black');
+                        }
+                    });
+                    intersection.addEventListener('mouseleave', () => {
+                        intersection.classList.remove('hover-black');
+                    });
+                    
+                    boardIntersections.appendChild(intersection);
+
+                    // Draw stone if it exists
+                    const stone = gameState.board[r * BOARD_SIZE + c];
+                    if (stone !== EMPTY) {
+                        placeStone(r, c, stone);
+                    }
+                }
+            }
+        }
+        
+        function placeStone(r, c, player) {
+            const stoneEl = document.createElement('div');
+            stoneEl.className = `stone absolute rounded-full z-20 ${player === BLACK ? 'bg-black' : 'bg-white border border-gray-400'} shadow-md`;
+            // Position stone at the center of the cell
+            stoneEl.style.left = `calc(${c} * (100% / ${BOARD_SIZE}) + (100% / ${BOARD_SIZE} / 2))`;
+            stoneEl.style.top = `calc(${r} * (100% / ${BOARD_SIZE}) + (100% / ${BOARD_SIZE} / 2))`;
+            stoneLayer.appendChild(stoneEl);
+        }
+
+        async function handleIntersectionClick(r, c) {
+            if (gameState.gameOver || gameState.currentPlayer === WHITE) return;
+            if (gameState.board[r * BOARD_SIZE + c] !== EMPTY) {
+                showMessage("This spot is already taken.", "error");
+                return;
+            }
+
+            const move = {
+                Board: gameState.board,
+                Player: gameState.currentPlayer,
+                Row: r,
+                Col: c,
+                Captures: {
+                    [String(BLACK)]: gameState.captures[BLACK],
+                    [String(WHITE)]: gameState.captures[WHITE],
+                },
+                LastBoardState: gameState.lastBoardState // State before this player's move
+            };
+            
+            // Store the board *before* this move, for the AI's Ko check
+            lastPlayerMoveBoardState = [...gameState.board];
+            await makeMove(move);
+        }
+        
+        async function handlePass() {
+            if (gameState.gameOver || gameState.currentPlayer === WHITE) return;
+
+            const move = {
+                Board: gameState.board,
+                Player: gameState.currentPlayer,
+                Row: -1, // -1 indicates a pass
+                Col: -1,
+                Captures: {
+                    [String(BLACK)]: gameState.captures[BLACK],
+                    [String(WHITE)]: gameState.captures[WHITE],
+                },
+                LastBoardState: gameState.lastBoardState
+            };
+            
+            lastPlayerMoveBoardState = [...gameState.board];
+            await makeMove(move);
+        }
+
+        async function makeMove(move) {
+            if (gameState.gameOver) return;
+            
+            showLoading();
+            hideMessage();
+
+            try {
+                // This controller will abort the fetch after 10 seconds
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
+
+                const response = await fetch(`${API_URL}/move`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(move),
+                    signal: controller.signal 
+                });
+
+                clearTimeout(timeoutId); // Clear the timeout if the request succeeds
+
+                if (!response.ok) {
+                    const err = await response.json();
+                    throw new Error(err.error || `Server error: ${response.status}`);
+                }
+
+                const data = await response.json(); // This is MoveResponse
+                
+                // The backend response is the new state *after* the AI has moved.
+                gameState.board = data.Board;
+                gameState.captures = {
+                    [BLACK]: data.Captures[String(BLACK)],
+                    [WHITE]: data.Captures[String(WHITE)],
+                };
+                
+                // The state *before* the AI's move (but after player's) is the Ko state
+                // for the *next* player move.
+                gameState.lastBoardState = lastPlayerMoveBoardState;
+                gameState.currentPlayer = BLACK; // It's now the player's turn again.
+
+                // --- FIX: Reworked Pass Logic ---
+                const playerPassed = (move.Row === -1);
+                const aiPassed = (data.MoveType === "PASS");
+
+                if (playerPassed && aiPassed) {
+                    gameState.passCount = 2;
+                } else if (playerPassed || aiPassed) {
+                    gameState.passCount = 1;
+                } else {
+                    gameState.passCount = 0;
+                }
+                
+                if (gameState.passCount >= 2) {
+                    showMessage("Both players passed. Game over.", "info");
+                    await handleGetScore(); // Automatically score the game
+                    gameState.gameOver = true;
+                } else {
+                    showMessage(data.Message, "info");
+                }
+
+                drawBoard();
+                updateInfo();
+
+            } catch (error) {
+                if (error.name === 'AbortError') {
+                    showMessage("Error: The AI server timed out. Please check if the Go backend is running.", "error");
+                } else {
+                    showMessage(`Error: ${error.message}`, "error");
+                }
+            } finally {
+                hideLoading();
+            }
+        }
+        
+        async function handleGetScore() {
+            if (loadingOverlay.style.display === 'flex') return; // Don't score if already loading
+            
+            showLoading();
+            hideMessage();
+            
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 5000); // 5s timeout
+
+            try {
+                const response = await fetch(`${API_URL}/score`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        Board: gameState.board,
+                        Captures: {
+                            [String(BLACK)]: gameState.captures[BLACK],
+                            [String(WHITE)]: gameState.captures[WHITE],
+                        }
+                    }),
+                    signal: controller.signal
+                });
+                
+                clearTimeout(timeoutId);
+                
+                if (!response.ok) {
+                    const err = await response.json();
+                    throw new Error(err.error || `Server error: ${response.status}`);
+                }
+                
+                const data = await response.json(); // ScoreResponse
+                
+                let winnerMessage = `Black: ${data.BlackScore}, White: ${data.WhiteScore}. `;
+                if (data.BlackScore > data.WhiteScore) {
+                    winnerMessage += "Black wins!";
+                } else if (data.WhiteScore > data.BlackScore) {
+                    winnerMessage += "White wins!";
+                } else {
+                    winnerMessage += "It's a draw!";
+                }
+                
+                showMessage(winnerMessage, "info");
+                gameState.gameOver = true;
+
+            } catch (error) {
+                if (error.name === 'AbortError') {
+                    showMessage("Error: Score server timed out.", "error");
+                } else {
+                    showMessage(`Error scoring: ${error.message}`, "error");
+                }
+            } finally {
+                hideLoading();
+            }
+        }
+        
+        function handleNewGame() {
+            initGame();
+        }
+
+        // --- UI Helper Functions ---
+        
+        function showLoading() {
+            loadingOverlay.style.display = 'flex';
+        }
+        
+        function hideLoading() {
+            loadingOverlay.style.display = 'none';
+        }
+        
+        function showMessage(msg, type = "info") {
+            gameMessageEl.textContent = msg;
+            gameMessageEl.className = 'text-center font-medium h-6'; // Reset classes
+            if (type === 'error') {
+                gameMessageEl.classList.add('text-red-600');
+            } else {
+                gameMessageEl.classList.add('text-blue-700');
+            }
+        }
+
+        function hideMessage() {
+            gameMessageEl.textContent = '';
+        }
+        
+        function updateInfo() {
+            blackCapturesEl.textContent = gameState.captures[BLACK];
+            whiteCapturesEl.textContent = gameState.captures[WHITE];
+        }
+        
+        // --- Event Listeners ---
+        newGameButton.addEventListener('click', handleNewGame);
+        passButton.addEventListener('click', handlePass);
+        scoreButton.addEventListener('click', handleGetScore);
+
+        // Initial setup
+        initGame();
+    </script>
+</body>
+</html>
+
+
