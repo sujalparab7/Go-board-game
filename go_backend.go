@@ -480,6 +480,10 @@ func scoreHandler(w http.ResponseWriter, r *http.Request) {
 
 
 func main() {
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+        http.ServeFile(w, r, "index.html")
+    })
+	
 	http.HandleFunc("/move", moveHandler)
 	http.HandleFunc("/score", scoreHandler)
 

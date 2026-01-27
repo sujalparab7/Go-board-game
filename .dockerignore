@@ -1,0 +1,6 @@
+.git
+bin/
+*.exe
+*.out
+.vscode/
+README.md
