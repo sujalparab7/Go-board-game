@@ -481,8 +481,8 @@ func main() {
 	http.HandleFunc("/move", moveHandler)
 	http.HandleFunc("/score", scoreHandler)
 
-	fmt.Println("Go AI Server starting on http://localhost:8080")
-	if err := http.ListenAndServe(":8080", nil); err != nil {
+	fmt.Println("Go AI Server starting on http://localhost:8082")
+	if err := http.ListenAndServe(":8082", nil); err != nil {
 		log.Fatal(err)
 	}
 }
