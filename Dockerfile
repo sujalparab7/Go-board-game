@@ -27,10 +27,10 @@ WORKDIR /root/
 # Copy only the compiled binary from the builder stage
 COPY --from=builder /app/main .
 
-#Copying indx.html to the final stage
+# Copying index.html to the final stage
 COPY index.html .
 
-# Expose the port your app runs on (Change 8080 if your code uses a different port)
+# Expose the port your app runs on
 EXPOSE 8080
 
 # Command to run the executable

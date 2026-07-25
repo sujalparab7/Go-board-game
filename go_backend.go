@@ -20,7 +20,7 @@ const (
 	KOMI       = 6.5 
 )
 
-
+var nodesEvaluated = 0
 
 type MoveRequest struct {
 	Board          []int          `json:"Board"`
@@ -52,12 +52,10 @@ type ErrorResponse struct {
 	Error string `json:"error"`
 }
 
-
 type Move struct {
 	Row int
 	Col int
 }
-
 
 func toIndex(r, c int) int {
 	return r*BOARD_SIZE + c
@@ -77,7 +75,6 @@ func getOpponent(player int) int {
 	}
 	return BLACK
 }
-
 
 func getGroup(board []int, r, c int) (map[int]bool, int) {
 	player := board[toIndex(r, c)]
@@ -107,11 +104,9 @@ func getGroup(board []int, r, c int) (map[int]bool, int) {
 			nIdx := toIndex(nr, nc)
 
 			if board[nIdx] == player && !group[nIdx] {
-				
 				group[nIdx] = true
 				queue = append(queue, nIdx)
 			} else if board[nIdx] == EMPTY && !libertiesSet[nIdx] {
-				
 				libertiesSet[nIdx] = true
 				liberties++
 			}
@@ -137,7 +132,6 @@ func removeCapturedStones(board *[]int, player int) int {
 				}
 
 				if liberties == 0 {
-					
 					for gIdx := range group {
 						(*board)[gIdx] = EMPTY
 						captured++
@@ -148,7 +142,6 @@ func removeCapturedStones(board *[]int, player int) int {
 	}
 	return captured
 }
-
 
 func isMoveLegal(board []int, r, c int, player int, lastBoardState []int) bool {
 	if r == -1 && c == -1 { 
@@ -246,14 +239,11 @@ func countTerritory(board []int) (int, int) {
 				
 				touchesBlack := false
 				touchesWhite := false
-				
-				currentTerritoryGroup := []int{}
 
 				for len(queue) > 0 {
 					currentIdx := queue[0]
 					queue = queue[1:]
 					territory++
-					currentTerritoryGroup = append(currentTerritoryGroup, currentIdx)
 
 					cr, cc := toCoords(currentIdx)
 					neighbors := [][]int{{cr - 1, cc}, {cr + 1, cc}, {cr, cc - 1}, {cr, cc + 1}}
@@ -286,8 +276,8 @@ func countTerritory(board []int) (int, int) {
 	return blackTerritory, whiteTerritory
 }
 
-
 func alphaBeta(board []int, depth int, alpha, beta float64, maximizingPlayer bool, captures map[string]int, lastBoardState []int) float64 {
+	nodesEvaluated++
 	if depth == 0 {
 		return evaluate(board, captures)
 	}
@@ -345,8 +335,9 @@ func alphaBeta(board []int, depth int, alpha, beta float64, maximizingPlayer boo
 }
 
 func findBestMove(board []int, captures map[string]int, lastBoardState []int) Move {
-	bestScore := -math.MaxFloat64 // FIX: Use float64 min
-	bestMove := Move{Row: -1, Col: -1} // Default to pass
+	nodesEvaluated = 0
+	bestScore := -math.MaxFloat64 
+	bestMove := Move{Row: -1, Col: -1} 
 
 	moves := generateMoves(board, WHITE, lastBoardState)
 
@@ -368,6 +359,7 @@ func findBestMove(board []int, captures map[string]int, lastBoardState []int) Mo
 			bestMove = move
 		}
 	}
+	fmt.Printf("Evaluated %d board states.\n", nodesEvaluated)
 	return bestMove
 }
 
@@ -378,7 +370,6 @@ func copyCaptures(captures map[string]int) map[string]int {
 	}
 	return newCaptures
 }
-
 
 func enableCORS(w *http.ResponseWriter) {
 	(*w).Header().Set("Access-Control-Allow-Origin", "*")
@@ -424,8 +415,12 @@ func moveHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	time.Sleep(500 * time.Millisecond) 
-	
+	start := time.Now()
+
 	aiMove := findBestMove(req.Board, req.Captures, req.Board) 
+
+	elapsed := time.Since(start)
+	fmt.Printf("AI took %s to calculate the move.\n", elapsed)
 	
 	aiMoveType := "PLAY"
 	aiMessage := fmt.Sprintf("AI played at (%d, %d).", aiMove.Row, aiMove.Col)
@@ -478,11 +473,10 @@ func scoreHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(resp)
 }
 
-
 func main() {
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-        http.ServeFile(w, r, "index.html")
-    })
+		http.ServeFile(w, r, "index.html")
+	})
 	
 	http.HandleFunc("/move", moveHandler)
 	http.HandleFunc("/score", scoreHandler)
@@ -492,4 +486,3 @@ func main() {
 		log.Fatal(err)
 	}
 }
-
