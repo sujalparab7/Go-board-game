@@ -116,6 +116,21 @@
                 </div>
             </div>
 
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4 text-center text-sm">
+                <div class="rounded-lg bg-blue-50 p-3">
+                    <p class="font-semibold text-gray-700">Latest AI move</p>
+                    <p id="latest-think-time" class="text-blue-700">— ms</p>
+                </div>
+                <div class="rounded-lg bg-blue-50 p-3">
+                    <p class="font-semibold text-gray-700">Latest states searched</p>
+                    <p id="latest-nodes" class="text-blue-700">—</p>
+                </div>
+                <div class="rounded-lg bg-indigo-50 p-3">
+                    <p class="font-semibold text-gray-700">Session average</p>
+                    <p id="average-ai-stats" class="text-indigo-700">—</p>
+                </div>
+            </div>
+
             <!-- Board -->
             <div id="board-container" class="relative w-full aspect-square max-w-lg mx-auto bg-yellow-600 rounded shadow-inner" style="--board-size: 9;">
                 <!-- Grid Lines -->
@@ -179,7 +194,11 @@
         const EMPTY = 0;
         const BLACK = 1;
         const WHITE = 2;
-        const API_URL = 'https://go-game-ai.duckdns.org';
+        // Use the same server when the page is served by Go/Docker; retain the
+        // deployed API when index.html is opened directly from the filesystem.
+        const API_URL = window.location.protocol.startsWith('http')
+            ? window.location.origin
+            : 'https://go-game-ai.duckdns.org';
 
         let gameState = {};
         let lastPlayerMoveBoardState = null; // Used for Ko rule
@@ -191,6 +210,9 @@
         const whiteCapturesEl = document.getElementById('white-captures');
         const gameMessageEl = document.getElementById('game-message');
         const loadingOverlay = document.getElementById('loading-overlay');
+        const latestThinkTimeEl = document.getElementById('latest-think-time');
+        const latestNodesEl = document.getElementById('latest-nodes');
+        const averageAiStatsEl = document.getElementById('average-ai-stats');
         
         const newGameButton = document.getElementById('new-game-btn');
         const passButton = document.getElementById('pass-btn');
@@ -203,7 +225,8 @@
                 captures: { [BLACK]: 0, [WHITE]: 0 },
                 lastBoardState: null, // This is the state for the *opponent* (AI) to check against
                 gameOver: false,
-                passCount: 0
+                passCount: 0,
+                aiStats: { moves: 0, totalThinkTimeMs: 0, totalNodes: 0 }
             };
             lastPlayerMoveBoardState = null; // This is the state for the *player* to check against
 
@@ -331,6 +354,14 @@
                     [BLACK]: data.Captures[String(BLACK)],
                     [WHITE]: data.Captures[String(WHITE)],
                 };
+
+                if (Number.isFinite(data.ThinkTimeMs) && Number.isFinite(data.NodesEvaluated)) {
+                    gameState.aiStats.moves++;
+                    gameState.aiStats.totalThinkTimeMs += data.ThinkTimeMs;
+                    gameState.aiStats.totalNodes += data.NodesEvaluated;
+                    latestThinkTimeEl.textContent = `${data.ThinkTimeMs} ms`;
+                    latestNodesEl.textContent = data.NodesEvaluated.toLocaleString();
+                }
                 
                 // The state *before* the AI's move (but after player's) is the Ko state
                 // for the *next* player move.
@@ -457,6 +488,16 @@
         function updateInfo() {
             blackCapturesEl.textContent = gameState.captures[BLACK];
             whiteCapturesEl.textContent = gameState.captures[WHITE];
+
+            const { moves, totalThinkTimeMs, totalNodes } = gameState.aiStats;
+            if (moves === 0) {
+                latestThinkTimeEl.textContent = '— ms';
+                latestNodesEl.textContent = '—';
+                averageAiStatsEl.textContent = '—';
+                return;
+            }
+
+            averageAiStatsEl.textContent = `${Math.round(totalThinkTimeMs / moves)} ms · ${Math.round(totalNodes / moves).toLocaleString()} states`;
         }
         
         // --- Event Listeners ---

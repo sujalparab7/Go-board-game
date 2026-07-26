@@ -16,11 +16,9 @@ const (
 	BLACK      = 1
 	WHITE      = 2
 	BOARD_SIZE = 9
-	MAX_DEPTH  = 2     
-	KOMI       = 6.5 
+	MAX_DEPTH  = 2
+	KOMI       = 6.5
 )
-
-var nodesEvaluated = 0
 
 type MoveRequest struct {
 	Board          []int          `json:"Board"`
@@ -32,10 +30,12 @@ type MoveRequest struct {
 }
 
 type MoveResponse struct {
-	Board    []int          `json:"Board"`
-	Captures map[string]int `json:"Captures"`
-	Message  string         `json:"Message"`
-	MoveType string         `json:"MoveType"` 
+	Board          []int          `json:"Board"`
+	Captures       map[string]int `json:"Captures"`
+	Message        string         `json:"Message"`
+	MoveType       string         `json:"MoveType"`
+	NodesEvaluated int            `json:"NodesEvaluated"`
+	ThinkTimeMs    int64          `json:"ThinkTimeMs"`
 }
 
 type ScoreRequest struct {
@@ -82,10 +82,10 @@ func getGroup(board []int, r, c int) (map[int]bool, int) {
 		return make(map[int]bool), 0
 	}
 
-	group := make(map[int]bool)     
-	libertiesSet := make(map[int]bool) 
+	group := make(map[int]bool)
+	libertiesSet := make(map[int]bool)
 	liberties := 0
-	
+
 	queue := []int{toIndex(r, c)}
 	group[toIndex(r, c)] = true
 
@@ -118,12 +118,12 @@ func getGroup(board []int, r, c int) (map[int]bool, int) {
 func removeCapturedStones(board *[]int, player int) int {
 	captured := 0
 	opponent := getOpponent(player)
-	checked := make(map[int]bool) 
+	checked := make(map[int]bool)
 
 	for r := 0; r < BOARD_SIZE; r++ {
 		for c := 0; c < BOARD_SIZE; c++ {
 			idx := toIndex(r, c)
-			
+
 			if (*board)[idx] == opponent && !checked[idx] {
 				group, liberties := getGroup(*board, r, c)
 
@@ -144,7 +144,7 @@ func removeCapturedStones(board *[]int, player int) int {
 }
 
 func isMoveLegal(board []int, r, c int, player int, lastBoardState []int) bool {
-	if r == -1 && c == -1 { 
+	if r == -1 && c == -1 {
 		return true
 	}
 	if !isValid(r, c) || board[toIndex(r, c)] != EMPTY {
@@ -209,17 +209,17 @@ func generateMoves(board []int, player int, lastBoardState []int) []Move {
 }
 
 func evaluate(board []int, captures map[string]int) float64 {
-	blackScore := 0.0 
-	whiteScore := 0.0 
+	blackScore := 0.0
+	whiteScore := 0.0
 
 	blackTerritory, whiteTerritory := countTerritory(board)
-	blackScore += float64(blackTerritory) 
-	whiteScore += float64(whiteTerritory) 
+	blackScore += float64(blackTerritory)
+	whiteScore += float64(whiteTerritory)
 
-	blackScore += float64(captures[strconv.Itoa(WHITE)]) 
-	whiteScore += float64(captures[strconv.Itoa(BLACK)]) 
+	blackScore += float64(captures[strconv.Itoa(WHITE)])
+	whiteScore += float64(captures[strconv.Itoa(BLACK)])
 
-	whiteScore += KOMI 
+	whiteScore += KOMI
 
 	return whiteScore - blackScore
 }
@@ -236,7 +236,7 @@ func countTerritory(board []int) (int, int) {
 				territory := 0
 				queue := []int{idx}
 				visited[idx] = true
-				
+
 				touchesBlack := false
 				touchesWhite := false
 
@@ -264,7 +264,7 @@ func countTerritory(board []int) (int, int) {
 						}
 					}
 				}
-				
+
 				if touchesBlack && !touchesWhite {
 					blackTerritory += territory
 				} else if !touchesBlack && touchesWhite {
@@ -276,21 +276,21 @@ func countTerritory(board []int) (int, int) {
 	return blackTerritory, whiteTerritory
 }
 
-func alphaBeta(board []int, depth int, alpha, beta float64, maximizingPlayer bool, captures map[string]int, lastBoardState []int) float64 {
-	nodesEvaluated++
+func alphaBeta(board []int, depth int, alpha, beta float64, maximizingPlayer bool, captures map[string]int, lastBoardState []int, nodesEvaluated *int) float64 {
+	(*nodesEvaluated)++
 	if depth == 0 {
 		return evaluate(board, captures)
 	}
 
-	player := WHITE 
+	player := WHITE
 	if !maximizingPlayer {
-		player = BLACK 
+		player = BLACK
 	}
 
 	moves := generateMoves(board, player, lastBoardState)
 
 	if maximizingPlayer {
-		maxEval := -math.MaxFloat64 
+		maxEval := -math.MaxFloat64
 		for _, move := range moves {
 			simBoard := make([]int, len(board))
 			copy(simBoard, board)
@@ -302,30 +302,30 @@ func alphaBeta(board []int, depth int, alpha, beta float64, maximizingPlayer boo
 				simCaptures[strconv.Itoa(getOpponent(player))] += captured
 			}
 
-			eval := alphaBeta(simBoard, depth-1, alpha, beta, false, simCaptures, board)
-			maxEval = math.Max(maxEval, eval) 
-			alpha = math.Max(alpha, eval)     
+			eval := alphaBeta(simBoard, depth-1, alpha, beta, false, simCaptures, board, nodesEvaluated)
+			maxEval = math.Max(maxEval, eval)
+			alpha = math.Max(alpha, eval)
 			if beta <= alpha {
 				break
 			}
 		}
 		return maxEval
 	} else {
-		minEval := math.MaxFloat64 
+		minEval := math.MaxFloat64
 		for _, move := range moves {
 			simBoard := make([]int, len(board))
 			copy(simBoard, board)
 			simCaptures := copyCaptures(captures)
 
-			if move.Row != -1 { 
+			if move.Row != -1 {
 				simBoard[toIndex(move.Row, move.Col)] = player
 				captured := removeCapturedStones(&simBoard, player)
 				simCaptures[strconv.Itoa(getOpponent(player))] += captured
 			}
-			
-			eval := alphaBeta(simBoard, depth-1, alpha, beta, true, simCaptures, board)
-			minEval = math.Min(minEval, eval) 
-			beta = math.Min(beta, eval)       
+
+			eval := alphaBeta(simBoard, depth-1, alpha, beta, true, simCaptures, board, nodesEvaluated)
+			minEval = math.Min(minEval, eval)
+			beta = math.Min(beta, eval)
 			if beta <= alpha {
 				break
 			}
@@ -334,10 +334,10 @@ func alphaBeta(board []int, depth int, alpha, beta float64, maximizingPlayer boo
 	}
 }
 
-func findBestMove(board []int, captures map[string]int, lastBoardState []int) Move {
-	nodesEvaluated = 0
-	bestScore := -math.MaxFloat64 
-	bestMove := Move{Row: -1, Col: -1} 
+func findBestMove(board []int, captures map[string]int, lastBoardState []int) (Move, int) {
+	nodesEvaluated := 0
+	bestScore := -math.MaxFloat64
+	bestMove := Move{Row: -1, Col: -1}
 
 	moves := generateMoves(board, WHITE, lastBoardState)
 
@@ -352,7 +352,7 @@ func findBestMove(board []int, captures map[string]int, lastBoardState []int) Mo
 			simCaptures[strconv.Itoa(BLACK)] += captured
 		}
 
-		moveScore := alphaBeta(simBoard, MAX_DEPTH-1, bestScore, math.MaxFloat64, false, simCaptures, board)
+		moveScore := alphaBeta(simBoard, MAX_DEPTH-1, bestScore, math.MaxFloat64, false, simCaptures, board, &nodesEvaluated)
 
 		if moveScore > bestScore {
 			bestScore = moveScore
@@ -360,7 +360,7 @@ func findBestMove(board []int, captures map[string]int, lastBoardState []int) Mo
 		}
 	}
 	fmt.Printf("Evaluated %d board states.\n", nodesEvaluated)
-	return bestMove
+	return bestMove, nodesEvaluated
 }
 
 func copyCaptures(captures map[string]int) map[string]int {
@@ -411,17 +411,17 @@ func moveHandler(w http.ResponseWriter, r *http.Request) {
 
 		req.Board[toIndex(req.Row, req.Col)] = req.Player
 		captured := removeCapturedStones(&req.Board, req.Player)
-		req.Captures[strconv.Itoa(WHITE)] += captured 
+		req.Captures[strconv.Itoa(WHITE)] += captured
 	}
 
-	time.Sleep(500 * time.Millisecond) 
+	time.Sleep(500 * time.Millisecond)
 	start := time.Now()
 
-	aiMove := findBestMove(req.Board, req.Captures, req.Board) 
+	aiMove, nodesEvaluated := findBestMove(req.Board, req.Captures, req.Board)
 
 	elapsed := time.Since(start)
 	fmt.Printf("AI took %s to calculate the move.\n", elapsed)
-	
+
 	aiMoveType := "PLAY"
 	aiMessage := fmt.Sprintf("AI played at (%d, %d).", aiMove.Row, aiMove.Col)
 
@@ -435,15 +435,17 @@ func moveHandler(w http.ResponseWriter, r *http.Request) {
 		} else {
 			req.Board[toIndex(aiMove.Row, aiMove.Col)] = WHITE
 			captured := removeCapturedStones(&req.Board, WHITE)
-			req.Captures[strconv.Itoa(BLACK)] += captured 
+			req.Captures[strconv.Itoa(BLACK)] += captured
 		}
 	}
 
 	resp := MoveResponse{
-		Board:    req.Board,
-		Captures: req.Captures,
-		Message:  aiMessage,
-		MoveType: aiMoveType,
+		Board:          req.Board,
+		Captures:       req.Captures,
+		Message:        aiMessage,
+		MoveType:       aiMoveType,
+		NodesEvaluated: nodesEvaluated,
+		ThinkTimeMs:    elapsed.Milliseconds(),
 	}
 	json.NewEncoder(w).Encode(resp)
 }
@@ -477,7 +479,7 @@ func main() {
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "index.html")
 	})
-	
+
 	http.HandleFunc("/move", moveHandler)
 	http.HandleFunc("/score", scoreHandler)
 

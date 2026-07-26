@@ -12,6 +12,8 @@ AI Opponent: A Go backend featuring an Alpha-Beta Pruning search algorithm.
 
 Optimized AI: The AI uses an optimized move generation strategy (checking only adjacent squares) to ensure fast response times.
 
+AI Search Metrics: Each AI turn reports the calculation time and number of search states evaluated. The interface also shows session averages, making it easy to collect performance data from a few games.
+
 Full Game Logic: Includes rules for:
 
 Stone Captures
@@ -54,11 +56,11 @@ go run go_backend.go
 
 
 
-The server will start and listen on http://localhost:8080.
+The server will start and listen on http://localhost:8082.
 
 2. Run the Frontend (Web App)
 
-Open: Simply open the index.html file in any modern web browser (like Chrome, Firefox, or Safari).
+Open: Visit http://localhost:8082 in a modern web browser. If you open index.html directly, it will use the deployed API instead.
 
 Play: The game will automatically connect to the running backend server. You can now place your first stone!
 
